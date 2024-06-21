@@ -4,14 +4,18 @@ import (
 	"database/sql"
 	"flag"
 	_ "github.com/go-sql-driver/mysql"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
+	"snippetbox.kbashetty.ai/internal/models"
 )
 
 type application struct {
-	logger *slog.Logger
-	db     *sql.DB
+	logger        *slog.Logger
+	snippets      *models.SnippetModel
+	templateCache map[string]*template.Template
 }
 
 func main() {
@@ -30,7 +34,13 @@ func main() {
 
 	defer db.Close()
 
-	app := &application{logger, db}
+	cache, err := newTemplateCache()
+	if err != nil {
+		logger.Error(err.Error())
+		os.Exit(1)
+	}
+
+	app := &application{logger: logger, snippets: &models.SnippetModel{DB: db}, templateCache: cache}
 
 	logger.Info("Starting server", slog.Any("addr", *addr))
 
@@ -54,4 +64,37 @@ func openDB(dsn string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+func newTemplateCache() (map[string]*template.Template, error) {
+	cache := map[string]*template.Template{}
+
+	pages, err := filepath.Glob("./ui/html/pages/*.tmpl")
+	if err != nil {
+		return nil, err
+	}
+
+	for _, page := range pages {
+
+		name := filepath.Base(page)
+
+		ts, err := template.ParseFiles("./ui/html/base.tmpl")
+		if err != nil {
+			return nil, err
+		}
+
+		ts, err = ts.ParseGlob("./ui/html/partials/*.tmpl")
+		if err != nil {
+			return nil, err
+		}
+
+		ts, err = ts.ParseFiles(page)
+		if err != nil {
+			return nil, err
+		}
+
+		cache[name] = ts
+	}
+
+	return cache, nil
 }
