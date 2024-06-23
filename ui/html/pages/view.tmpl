@@ -1,6 +1,7 @@
 <!doctype html>
-{{define "title"}}Home{{end}}
+{{define "title"}}"title"}}Snippet #{{.Snippet.ID}}{{end}}
 {{define "main"}}
+    {{with .Snippet}}
     <div class="snippet">
         <div class='metadata'>
             <strong>{{.Title}}</strong>
@@ -8,8 +9,9 @@
         </div>
         <pre><code>{{.Content}}</code></pre>
         <div class='metadata'>
-            <time>Created: {{.Created}}</time>
-            <time>Expires: {{.Expires}}</time>
+            <time>{{.Created | humanDate | printf "Created: %s"}}</time>
+            <time>{{.Expires | humanDate | printf "Expires: %s"}}</time>
         </div>
     </div>
+    {{end}}
 {{end}}

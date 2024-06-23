@@ -3,19 +3,22 @@ package main
 import (
 	"database/sql"
 	"flag"
+	"github.com/alexedwards/scs/mysqlstore"
+	"github.com/alexedwards/scs/v2"
 	_ "github.com/go-sql-driver/mysql"
 	"html/template"
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"snippetbox.kbashetty.ai/internal/models"
+	"time"
 )
 
 type application struct {
-	logger        *slog.Logger
-	snippets      *models.SnippetModel
-	templateCache map[string]*template.Template
+	logger         *slog.Logger
+	snippets       *models.SnippetModel
+	templateCache  map[string]*template.Template
+	sessionManager *scs.SessionManager
 }
 
 func main() {
@@ -40,11 +43,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	app := &application{logger: logger, snippets: &models.SnippetModel{DB: db}, templateCache: cache}
+	sessionManager := scs.New()
+	sessionManager.Store = mysqlstore.New(db)
+	sessionManager.Lifetime = 12 * time.Hour
+
+	app := &application{
+		logger:         logger,
+		snippets:       &models.SnippetModel{DB: db},
+		templateCache:  cache,
+		sessionManager: sessionManager,
+	}
+
+	srv := &http.Server{
+		Addr:     *addr,
+		Handler:  app.routes(),
+		ErrorLog: slog.NewLogLogger(logger.Handler(), slog.LevelError),
+	}
 
 	logger.Info("Starting server", slog.Any("addr", *addr))
 
-	err = http.ListenAndServe(*addr, app.routes())
+	err = srv.ListenAndServeTLS("./tls/cert2.pem", "./tls/key2.pem")
 	if err != nil {
 		logger.Error(err.Error())
 		os.Exit(1)
@@ -64,37 +82,4 @@ func openDB(dsn string) (*sql.DB, error) {
 	}
 
 	return db, nil
-}
-
-func newTemplateCache() (map[string]*template.Template, error) {
-	cache := map[string]*template.Template{}
-
-	pages, err := filepath.Glob("./ui/html/pages/*.tmpl")
-	if err != nil {
-		return nil, err
-	}
-
-	for _, page := range pages {
-
-		name := filepath.Base(page)
-
-		ts, err := template.ParseFiles("./ui/html/base.tmpl")
-		if err != nil {
-			return nil, err
-		}
-
-		ts, err = ts.ParseGlob("./ui/html/partials/*.tmpl")
-		if err != nil {
-			return nil, err
-		}
-
-		ts, err = ts.ParseFiles(page)
-		if err != nil {
-			return nil, err
-		}
-
-		cache[name] = ts
-	}
-
-	return cache, nil
 }
