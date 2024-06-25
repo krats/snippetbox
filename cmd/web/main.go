@@ -18,8 +18,8 @@ import (
 
 type application struct {
 	logger         *slog.Logger
-	snippets       *models.SnippetModel
-	users          *models.UserModel
+	snippets       models.SnippetModelInterface
+	users          models.UserModelInterface
 	formDecoder    *form.Decoder
 	templateCache  map[string]*template.Template
 	sessionManager *scs.SessionManager
@@ -39,7 +39,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	defer db.Close()
+	defer func(db *sql.DB) {
+		_ = db.Close()
+	}(db)
 
 	cache, err := newTemplateCache()
 	if err != nil {
@@ -99,7 +101,7 @@ func openDB(dsn string) (*sql.DB, error) {
 
 	err = db.Ping()
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 
